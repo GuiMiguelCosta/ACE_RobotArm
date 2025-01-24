@@ -3,6 +3,7 @@
 #include <VL53L0X.h>
 #include <Adafruit_TCS34725.h>
 #include <Adafruit_PWMServoDriver.h>
+#include "kinematics.h"
 
 #define SERVO_MIN 400  
 #define SERVO_MAX 2425  
@@ -36,16 +37,6 @@ int n_servos = 4;
 
 int desired_pos[2];
 
-typedef enum
-{
-    REST,
-    MOVE,
-    PICKUP,
-    CHECK_COLOR,
-    DROP,
-    SCAN_GRID
-};
-
 struct sm 
 {
     int curr_state = REST;
@@ -54,189 +45,56 @@ struct sm
 
 sm state_machine;
 
-int getPwmForAngle(int servo, int theta) 
-{
-    if (theta <= 90 && theta >= -90)
-        if (servo == 0) return ((theta + 90) * 1950 / 180 + 350);
-        else return ((theta + 90) * 1950 / 180 + 450);
-    else return getPwmForAngle(0, 0);
-}
 
-void moveServoToAngle(int servo_num, float target_angle) 
-{
-    Serial.print("Servo: ");
-    Serial.println(servo_num);
-    Serial.print("Current angle: ");
-    Serial.println(curr_theta[servo_num]);
-    Serial.print("Target angle: ");
-    Serial.println(target_angle);
+// states
+typedef enum{
+    REST,
+    MOVE,
+    PICKUP,
+    CHECK_COLOR,
+    DROP,
+    SCAN_GRID
+} state_t;
 
-    int theta = (int)target_angle;
+// finite state machine
+typedef struct{
+    state_t state, new_state;
+    unsigned long tis, tes;
+} fsm_t;
 
-    if (curr_theta[servo_num] < theta) {
-        for (int i = curr_theta[servo_num]; i <= theta; i += theta_step) 
-        {
-            float pwm = getPwmForAngle(servo_num, i);
-            pca9685.writeMicroseconds(servo_num, pwm);
-            delay(STEP_DELAY/2);
-        }
-    } else {
-        for (int i = curr_theta[servo_num]; i >= theta; i -= theta_step) 
-        {
-            float pwm = getPwmForAngle(servo_num, i);
-            pca9685.writeMicroseconds(servo_num, pwm);
-            delay(STEP_DELAY/2);
-        }
+// finite state machines declaration
+fsm_t scanner, grabber, COLOR, one, two, three, control_fsm;
+
+// set state function
+void set_state(fsm_t& fsm, state_t new_state) {
+    if(fsm.state != new_state){
+        fsm.state = new_state;
+        fsm.tes = millis();
+        fsm.tis = 0;
     }
-    curr_theta[servo_num] = theta;
-    Serial.println("Reached target angle");
 }
 
-void moveTwo(float theta1, float theta2) 
-{
-    int base_start = curr_theta[BASE_SERVO];
-    int elbow_start = curr_theta[ELBOW_SERVO];
-    int base_target = (int)theta1;
-    int elbow_target = (int)theta2;
+// objects declaration
+VL53L0X tofsensor;
+Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
+/*ServoControl control;*/
+Kinematics kinematics;
 
-    int base_steps = abs(base_target - base_start) / theta_step;
-    int elbow_steps = abs(elbow_target - elbow_start) / theta_step;
-    int max_steps = max(base_steps, elbow_steps);
+// aux variables
 
-    for (int step = 0; step <= max_steps; step++) 
-    {
-        int base_angle = base_start + (step * (base_target - base_start)) / max_steps;
-        int elbow_angle = elbow_start + (step * (elbow_target - elbow_start)) / max_steps;
 
-        float base_pwm = getPwmForAngle(BASE_SERVO, base_angle);
-        float elbow_pwm = getPwmForAngle(ELBOW_SERVO, elbow_angle);
-        pca9685.writeMicroseconds(BASE_SERVO, base_pwm);
-        pca9685.writeMicroseconds(ELBOW_SERVO, elbow_pwm);
-
-        delay(STEP_DELAY); 
-    }
-
-    curr_theta[BASE_SERVO] = base_target;
-    curr_theta[ELBOW_SERVO] = elbow_target;
-
-    Serial.println("Servos atingiram os ângulos alvo:");
-    Serial.print("BASE_SERVO: ");
-    Serial.println(base_target);
-    Serial.print("ELBOW_SERVO: ");
-    Serial.println(elbow_target);
-}
-
-void OpenClaw()
-{
-    moveServoToAngle(CLAW_SERVO,OPEN_CLAW);
-}
-
-void CloseClaw()
-{
-    moveServoToAngle(CLAW_SERVO,CLOSED_CLAW);
-}
-
-void goDown()
-{
-    moveServoToAngle(HEIGHT_SERVO,MIN_HEIGHT);
-}
-
-void goUp()
-{
-    moveServoToAngle(HEIGHT_SERVO,MAX_HEIGHT);
-}
-
-void pickUp()
-{
-    OpenClaw();
-    goDown();
-    CloseClaw();
-    goUp();
-}
-void dropDown()
-{
-    goDown();
-    OpenClaw();
-    goUp();
-    CloseClaw();
-}
-
-void moveToPos(float x, float y)
-{
-    const float rad_to_deg = 180.0 / 3.1415;
-
-    float H = sqrt(x * x + y * y);
-
-    if (H > SEGMENT_1_LENGTH + SEGMENT_2_LENGTH || H <= 0) 
-    {
-        Serial.println("Target position is out of reach!");
-        return;
-    }
-
-    float cosTheta2 = (-H * H + SEGMENT_1_LENGTH * SEGMENT_1_LENGTH + SEGMENT_2_LENGTH * SEGMENT_2_LENGTH) / (2 * SEGMENT_1_LENGTH * SEGMENT_2_LENGTH);
-    float theta2 = acos(cosTheta2) * rad_to_deg; 
-
-    float angleToTarget = atan2(y, x) * rad_to_deg; 
-    float cosAlpha = (H * H + SEGMENT_1_LENGTH * SEGMENT_1_LENGTH - SEGMENT_2_LENGTH * SEGMENT_2_LENGTH) / (2 * H * SEGMENT_1_LENGTH);
-    float alpha = acos(cosAlpha) * rad_to_deg; 
-
-    float theta1 = angleToTarget + alpha;
-
-    float thetaS1 = theta1 - 90;
-    float thetaS2 = theta2 - 90;
-
-    if(thetaS1<-90) 
-    {
-        thetaS1 = -90;
-    }
-    if(thetaS2<-90) 
-    {
-        thetaS2 = -90;
-    }
-    if(thetaS1>90) 
-    {
-        thetaS1 = 90;
-    }
-    if(thetaS2>90) 
-    {
-        thetaS2 = 90;
-    }
-
-    // Move servos
-    moveTwo(thetaS1,thetaS2);
-}
-
-String getColor() {
-    uint16_t r, g, b, c;
-    tcs.getRawData(&r, &g, &b, &c);
-
-    Serial.print("Raw R: "); Serial.print(r);
-    Serial.print(" G: "); Serial.print(g);
-    Serial.print(" B: "); Serial.print(b);
-    Serial.print(" C: "); Serial.println(c);
-
-    float sum = r + g + b;         
-    if (sum == 0) return "Unknown";
-
-    float normR = r / sum;
-    float normG = g / sum;
-    float normB = b / sum;
-
-    if (normR > normG && normR > normB) return "Red";
-    else if (normG > normR && normG > normB) return "Green";
-    else if (normB > normR && normB > normG) return "Blue";
-    else return "Unknown";
-}
-
-int find_ServoDriver(int addr) 
-{
-    Wire.beginTransmission(addr);
-    Wire.write(PCA9685_MODE1);
-    Wire.write(MODE1_RESTART);
-
-    int err = Wire.endTransmission();
-    return !err;
-}
+// functions declaration
+int getPwmForAngle(int servo, int theta);
+void moveServoToAngle(int servo_num, float target_angle);
+void moveTwo(float theta1, float theta2);
+void OpenClaw();
+void CloseClaw();
+void goUp();
+void goDown();
+void pickUp();
+void dropDown();
+void moveToPos(float x, float y);
+int find_ServoDriver(int addr);
 
 void setup() 
 {
@@ -315,9 +173,27 @@ void loop()
     }
 }
 
-//teste commit
+
+String getColor() {
+    uint16_t r, g, b, c;
+    tcs.getRawData(&r, &g, &b, &c);
+
+    Serial.print("Raw R: "); Serial.print(r);
+    Serial.print(" G: "); Serial.print(g);
+    Serial.print(" B: "); Serial.print(b);
+    Serial.print(" C: "); Serial.println(c);
+
+    float sum = r + g + b;         
+    if (sum == 0) return "Unknown";
+
+    float normR = r / sum;
+    float normG = g / sum;
+    float normB = b / sum;
+
+    if (normR > normG && normR > normB) return "Red";
+    else if (normG > normR && normG > normB) return "Green";
+    else if (normB > normR && normB > normG) return "Blue";
+    else return "Unknown";
+}
 
 
-
-
-//Gonçalo Goat

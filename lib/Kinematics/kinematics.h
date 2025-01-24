@@ -42,10 +42,10 @@ class Kinematics {
         void dropDown();
         void moveToPos(float x, float y);
         int find_ServoDriver(int addr);
-        /*
+        
         int theta_step = 2;
         int curr_theta[4] = {0, 90, -90, 0};
         int target_theta[4] = {curr_theta[0], curr_theta[1], curr_theta[2], curr_theta[3]};
         int n_servos = 4;
-        int desired_pos[2];*/
+        int desired_pos[2];
 };
