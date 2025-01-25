@@ -17,6 +17,19 @@ typedef enum {
     CONTROL
 } state_t;
 
+const char* stateToString(state_t state) {
+    switch (state) {
+        case REST: return "REST";
+        case MOVE: return "MOVE";
+        case PICKUP: return "PICKUP";
+        case CHECK_COLOR: return "CHECK_COLOR";
+        case DROP: return "DROP";
+        case SCAN_GRID: return "SCAN_GRID";
+        case CONTROL: return "CONTROL";
+        default: return "UNKNOWN";
+    }
+}
+
 // Finite state machine
 typedef struct {
     state_t state, new_state;
@@ -28,14 +41,14 @@ fsm_t state_machine;
 // Set state function
 void set_state(fsm_t& fsm, state_t new_state) {
     if (fsm.state != new_state) {
+        Serial.print("Switching from ");
+        Serial.print(stateToString(fsm.state));  
+        Serial.print(" to ");
+        Serial.println(stateToString(new_state)); 
+
         fsm.state = new_state;
         fsm.tes = millis();
         fsm.tis = 0;
-        Serial.print("Switching from ");
-        Serial.print(fsm.state); 
-        Serial.print(" to ");
-        Serial.println(new_state);  
-
     }
 }
 
@@ -94,11 +107,13 @@ void loop()
                 set_state(state_machine,REST);
             }
         }
+
         //ESCREVER OUTPUTS
         switch (state_machine.state)
         {
             case CONTROL:
                 if (input == 'A') {  
+                    
                     kinematics.moveToPos(kinematics.desired_pos[0], kinematics.desired_pos[1]);
                 } 
                 else if (input == 'R') {  
