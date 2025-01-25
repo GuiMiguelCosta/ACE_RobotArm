@@ -1,5 +1,8 @@
 #include "kinematics.h"
 
+Adafruit_PWMServoDriver Kinematics::pca9685 = Adafruit_PWMServoDriver(PCA9685_I2C_ADDRESS);
+
+
 int Kinematics::getPwmForAngle(int servo, int theta) 
 {
     if (theta <= 90 && theta >= -90)
@@ -19,24 +22,32 @@ void Kinematics::moveServoToAngle(int servo_num, float target_angle)
 
     int theta = (int)target_angle;
 
+    unsigned long lastTime = millis();
+
     if (curr_theta[servo_num] < theta) {
-        for (int i = curr_theta[servo_num]; i <= theta; i += theta_step) 
-        {
+        for (int i = curr_theta[servo_num]; i <= theta; i += theta_step) {
             float pwm = getPwmForAngle(servo_num, i);
             pca9685.writeMicroseconds(servo_num, pwm);
-            delay(STEP_DELAY/2);
+            
+            while (millis() - lastTime < STEP_DELAY / 2) {
+            }
+            lastTime = millis();
         }
     } else {
-        for (int i = curr_theta[servo_num]; i >= theta; i -= theta_step) 
-        {
+        for (int i = curr_theta[servo_num]; i >= theta; i -= theta_step) {
             float pwm = getPwmForAngle(servo_num, i);
             pca9685.writeMicroseconds(servo_num, pwm);
-            delay(STEP_DELAY/2);
+            
+            while (millis() - lastTime < STEP_DELAY / 2) {
+             
+            }
+            lastTime = millis();
         }
     }
     curr_theta[servo_num] = theta;
     Serial.println("Reached target angle");
 }
+
 
 void Kinematics::moveTwo(float theta1, float theta2) 
 {
@@ -49,17 +60,24 @@ void Kinematics::moveTwo(float theta1, float theta2)
     int elbow_steps = abs(elbow_target - elbow_start) / theta_step;
     int max_steps = max(base_steps, elbow_steps);
 
-    for (int step = 0; step <= max_steps; step++) 
-    {
-        int base_angle = base_start + (step * (base_target - base_start)) / max_steps;
-        int elbow_angle = elbow_start + (step * (elbow_target - elbow_start)) / max_steps;
+    unsigned long startMillis = millis(); 
+    unsigned long elapsedMillis = 0;
+    int step = 0;
 
-        float base_pwm = getPwmForAngle(BASE_SERVO, base_angle);
-        float elbow_pwm = getPwmForAngle(ELBOW_SERVO, elbow_angle);
-        pca9685.writeMicroseconds(BASE_SERVO, base_pwm);
-        pca9685.writeMicroseconds(ELBOW_SERVO, elbow_pwm);
+    while (step <= max_steps) {
+        elapsedMillis = millis() - startMillis; 
 
-        delay(STEP_DELAY); 
+        if (elapsedMillis >= (long unsigned int)(step * STEP_DELAY)) {
+            int base_angle = base_start + (step * (base_target - base_start)) / max_steps;
+            int elbow_angle = elbow_start + (step * (elbow_target - elbow_start)) / max_steps;
+
+            float base_pwm = getPwmForAngle(BASE_SERVO, base_angle);
+            float elbow_pwm = getPwmForAngle(ELBOW_SERVO, elbow_angle);
+            pca9685.writeMicroseconds(BASE_SERVO, base_pwm);
+            pca9685.writeMicroseconds(ELBOW_SERVO, elbow_pwm);
+
+            step++;  
+        }
     }
 
     curr_theta[BASE_SERVO] = base_target;
@@ -71,6 +89,7 @@ void Kinematics::moveTwo(float theta1, float theta2)
     Serial.print("ELBOW_SERVO: ");
     Serial.println(elbow_target);
 }
+
 
 void Kinematics::OpenClaw()
 {
@@ -99,6 +118,7 @@ void Kinematics::pickUp()
     CloseClaw();
     goUp();
 }
+
 void Kinematics::dropDown()
 {
     goDown();
@@ -152,7 +172,7 @@ void Kinematics::moveToPos(float x, float y)
     moveTwo(thetaS1,thetaS2);
 }
 
-int find_ServoDriver(int addr) 
+int Kinematics::find_ServoDriver(int addr) 
 {
     Wire.beginTransmission(addr);
     Wire.write(PCA9685_MODE1);
@@ -160,4 +180,25 @@ int find_ServoDriver(int addr)
 
     int err = Wire.endTransmission();
     return !err;
+}
+
+void Kinematics::kinematics_setup()
+{
+    Wire.begin();
+    
+    while (!find_ServoDriver(PCA9685_I2C_ADDRESS)) {
+        Serial.println("No PCA9685 found ... check your connections");
+        delay(200);
+    }
+    delay(10);
+    Serial.println("Found PCA9685");
+
+    pca9685.begin();
+    pca9685.setPWMFreq(50);
+
+    for (int i = 0; i < n_servos; i++) {
+        pca9685.writeMicroseconds(i, getPwmForAngle(i, curr_theta[i]));
+        Serial.print("Setting default theta for ");
+        Serial.println(i);
+    }
 }
