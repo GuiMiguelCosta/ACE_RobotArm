@@ -3,9 +3,18 @@
 #include <Adafruit_TCS34725.h>
 #include "kinematics.h"
 
+//#define DEBUG
+
 #define TIME_BETWEEN_CYCLES 50
 uint32_t now = 0;
 uint32_t last_cycle = 0;
+
+bool automaticMode = false;
+bool pieceFound = false;
+bool reachedPosition = false;
+bool pickupComplete = false;
+bool colorChecked = false;
+bool dropped = false;
 
 typedef enum {
     REST,
@@ -57,7 +66,7 @@ VL53L0X tofsensor;
 Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
 Kinematics kinematics;
 
-char input;
+char input = ' ';
 
 String getColor() {
     uint16_t r, g, b, c;
@@ -84,7 +93,8 @@ String getColor() {
 void setup() {
     Serial.begin(9600);
     kinematics.kinematics_setup();
-    set_state(state_machine,CONTROL);
+    state_machine.new_state = CONTROL;
+    set_state(state_machine,state_machine.new_state);
 }
 
 void loop() 
@@ -92,6 +102,11 @@ void loop()
     uint32_t now = millis();
     if(now - last_cycle > TIME_BETWEEN_CYCLES)
     {
+        #ifdef DEBUG
+        Serial.println("Entering New Cycle");
+        Serial.print("Currently in state: "); Serial.println(stateToString(state_machine.state));
+        #endif
+
         //UPDATE CYCLE VARIABLES
         last_cycle = now;
         //LER ENTRADAS
@@ -104,16 +119,68 @@ void loop()
         {
             if(input=='E')
             {
-                set_state(state_machine,REST);
+                #ifdef DEBUG
+                Serial.println("Condition to enter REST state from CONTROL triggered");
+                #endif
+
+                state_machine.new_state = REST;
             }
         }
+        else if (state_machine.state == REST) 
+        {
+            if (automaticMode) 
+            {
+                state_machine.new_state = SCAN_GRID;
+            } 
+        }
+        else if(state_machine.state==SCAN_GRID)
+        {
+            if(pieceFound)
+            {
+                pieceFound = false;
+                state_machine.new_state = MOVE;
+            }
+        }
+        else if(state_machine.state==MOVE)
+        {
+            if(reachedPosition)
+            {
+                reachedPosition = false;
+                state_machine.new_state = PICKUP;
+            }
+        }
+        else if(state_machine.state==PICKUP)
+        {
+            if(pickupComplete)
+            {
+                pickupComplete = false;
+                state_machine.new_state = CHECK_COLOR;
+            }
+        }
+        else if(state_machine.state==CHECK_COLOR)
+        {
+            if(colorChecked)
+            {
+                colorChecked = false;
+                state_machine.new_state = DROP;
+            }
+        }
+        else if(state_machine.state==DROP)
+        {
+            if(dropped)
+            {
+                dropped = false;
+                state_machine.new_state = REST;
+            }
+        }
+
+        set_state(state_machine , state_machine.new_state);
 
         //ESCREVER OUTPUTS
         switch (state_machine.state)
         {
             case CONTROL:
                 if (input == 'A') {  
-                    
                     kinematics.moveToPos(kinematics.desired_pos[0], kinematics.desired_pos[1]);
                 } 
                 else if (input == 'R') {  
@@ -140,12 +207,12 @@ void loop()
                 else if (input == 'S') {
                     Serial.println(getColor());
                 }
-                else 
+                else if (input=='1') 
                 {
-                    
+                    kinematics.moveToPos(7,7);
                 }
             break;
-            
+
             default:
                 break;
         }
