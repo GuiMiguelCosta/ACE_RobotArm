@@ -29,7 +29,7 @@ void Kinematics::moveServoToAngle(int servo_num, float target_angle)
             float pwm = getPwmForAngle(servo_num, i);
             pca9685.writeMicroseconds(servo_num, pwm);
             
-            while (millis() - lastTime < STEP_DELAY / 2) {
+            while (millis() - lastTime < STEP_DELAY) {
             }
             lastTime = millis();
         }
@@ -38,7 +38,7 @@ void Kinematics::moveServoToAngle(int servo_num, float target_angle)
             float pwm = getPwmForAngle(servo_num, i);
             pca9685.writeMicroseconds(servo_num, pwm);
             
-            while (millis() - lastTime < STEP_DELAY / 2) {
+            while (millis() - lastTime < STEP_DELAY) {
              
             }
             lastTime = millis();
@@ -155,9 +155,10 @@ void Kinematics::moveToPos(float x, float y)
     {
         thetaS1 = -90;
     }
-    if(thetaS2<-90) 
+    //para não entrar em contacto com a estrutura e forçar/estragar
+    if(thetaS2<-50) 
     {
-        thetaS2 = -90;
+        thetaS2 = -50;
     }
     if(thetaS1>90) 
     {

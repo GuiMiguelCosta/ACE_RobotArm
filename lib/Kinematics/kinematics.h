@@ -5,7 +5,7 @@
 
 #define SERVO_MIN 400
 #define SERVO_MAX 2425
-#define STEP_DELAY 30
+#define STEP_DELAY 20
 #define MAX_HEIGHT -90
 #define MIN_HEIGHT 90
 #define OPEN_CLAW -45

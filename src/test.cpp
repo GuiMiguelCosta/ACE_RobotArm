@@ -132,6 +132,14 @@ void loop()
             {
                 state_machine.new_state = SCAN_GRID;
             } 
+            if(input=='C')
+            {
+                #ifdef DEBUG
+                Serial.println("Condition to enter CONTROL state from REST triggered");
+                #endif
+
+                state_machine.new_state = CONTROL;
+            }
         }
         else if(state_machine.state==SCAN_GRID)
         {
@@ -207,9 +215,42 @@ void loop()
                 else if (input == 'S') {
                     Serial.println(getColor());
                 }
-                else if (input=='1') 
+                else if (input=='M') 
                 {
-                    kinematics.moveToPos(7,7);
+                    String inputBuffer = "";
+                    int x = 0, y = 0;
+                    bool validInput = false;
+
+                    Serial.println("Enter X,Y values or press L to cancel:");
+
+                    while (!validInput) {
+                        if (Serial.available() > 0) {
+                            char ch = Serial.read();
+
+                            if (ch == 'L') {
+                                Serial.println("Operation canceled.");
+                                break;
+                            }
+                            else if (ch == '\n' || ch == '\r') {
+                                int commaIndex = inputBuffer.indexOf(',');
+                                if (commaIndex != -1) {
+                                    x = inputBuffer.substring(0, commaIndex).toInt();
+                                    y = inputBuffer.substring(commaIndex + 1).toInt();
+                                    validInput = true;
+                                } else {
+                                    Serial.println("Invalid format. Use X,Y.");
+                                    inputBuffer = "";
+                                }
+                            } else {
+                                inputBuffer += ch;
+                            }
+                        }
+                    }
+
+                    if (validInput) {
+                        kinematics.moveToPos(x, y);
+                        Serial.print("Moving to position X: "); Serial.print(x); Serial.print(" Y: "); Serial.println(y);
+                    }
                 }
             break;
 
