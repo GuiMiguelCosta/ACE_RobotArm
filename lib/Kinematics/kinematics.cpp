@@ -13,13 +13,6 @@ int Kinematics::getPwmForAngle(int servo, int theta)
 
 void Kinematics::moveServoToAngle(int servo_num, float target_angle) 
 {
-    Serial.print("Servo: ");
-    Serial.println(servo_num);
-    Serial.print("Current angle: ");
-    Serial.println(curr_theta[servo_num]);
-    Serial.print("Target angle: ");
-    Serial.println(target_angle);
-
     int theta = (int)target_angle;
 
     unsigned long lastTime = millis();
@@ -45,7 +38,6 @@ void Kinematics::moveServoToAngle(int servo_num, float target_angle)
         }
     }
     curr_theta[servo_num] = theta;
-    Serial.println("Reached target angle");
 }
 
 void Kinematics::moveTwo(float theta1, float theta2) 
@@ -81,12 +73,6 @@ void Kinematics::moveTwo(float theta1, float theta2)
 
     curr_theta[BASE_SERVO] = base_target;
     curr_theta[ELBOW_SERVO] = elbow_target;
-
-    Serial.println("Servos atingiram os ângulos alvo:");
-    Serial.print("BASE_SERVO: ");
-    Serial.println(base_target);
-    Serial.print("ELBOW_SERVO: ");
-    Serial.println(elbow_target);
 }
 
 void Kinematics::OpenClaw()
@@ -149,26 +135,15 @@ void Kinematics::moveToPos(float x, float y)
     float thetaS1 = theta1 - 90;
     float thetaS2 = theta2 - 90;
 
-    if(thetaS1<-90) 
-    {
-        thetaS1 = -90;
-    }
-    //para não entrar em contacto com a estrutura e forçar/estragar
-    if(thetaS2<-50) 
-    {
-        thetaS2 = -50;
-    }
-    if(thetaS1>90) 
-    {
-        thetaS1 = 90;
-    }
-    if(thetaS2>90) 
-    {
-        thetaS2 = 90;
-    }
 
     // Move servos
-    moveTwo(thetaS1,thetaS2);
+    if(isPositionReachable(H,thetaS1,thetaS2)) 
+    {
+        moveTwo(thetaS1,thetaS2);
+        curr_pos[0] = desired_pos[0];
+        curr_pos[1] = desired_pos[1];
+    }
+    else Serial.println("Position not reachable due to physical constraints");
 }
 
 int Kinematics::find_ServoDriver(int addr) 
@@ -193,9 +168,27 @@ void Kinematics::kinematics_setup()
     pca9685.begin();
     pca9685.setPWMFreq(50);
 
-    for (int i = 0; i < n_servos; i++) {
-        pca9685.writeMicroseconds(i, getPwmForAngle(i, curr_theta[i]));
-        Serial.print("Setting default theta for ");
-        Serial.println(i);
+    moveTwo(0,90);
+    goUp();
+    CloseClaw();
+}
+
+bool Kinematics::isPositionReachable(float h, float theta1, float theta2)
+{
+    if(h<=0 || h>(SEGMENT_1_LENGTH+SEGMENT_2_LENGTH+TOLERANCE))
+    {
+        Serial.println("Not reachable due to Distance");
+        return false;
     }
+    if(theta1>(MAX_T1+TOLERANCE) || theta1<(MIN_T1-TOLERANCE))
+    {
+        Serial.println("Not reachable due to Theta1");
+        return false;
+    }
+    if(theta2>(MAX_T2+TOLERANCE) || theta2<(MIN_T2-TOLERANCE))
+    {
+        Serial.println("Not reachable due to Theta2");
+        return false;
+    }
+    return true;
 }

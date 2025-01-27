@@ -17,6 +17,12 @@ bool pickupComplete = false;
 bool colorChecked = false;
 bool dropped = false;
 
+#define DEFAULT_COLOR_CHECK_X 10
+#define DEFAULT_COLOR_CHECK_Y 10
+float colorCheckX = DEFAULT_COLOR_CHECK_X;
+float colorCheckY = DEFAULT_COLOR_CHECK_Y;
+String color = "Unknown";
+
 #define MAX_PIECE_DISTANCE 21
 
 typedef enum {
@@ -69,26 +75,28 @@ Kinematics kinematics;
 void scan()
 {
     kinematics.moveToPos(SEGMENT_1_LENGTH+SEGMENT_2_LENGTH,0);
-    for (int i = -90; i < 90; i++)
+    for (int theta = -90; theta < 90; theta++)
     {
-        kinematics.moveServoToAngle(BASE_SERVO,i);
+        kinematics.moveServoToAngle(BASE_SERVO,theta);
         //reads distance in mm
         uint16_t distance = Sensors::readTofDistance();
         //passes to cm
         distance = distance / 10;
-        Serial.println(distance);
         //compares
         if(distance<=MAX_PIECE_DISTANCE)
         {
-            kinematics.desired_pos[0] = distance*cos(i);
-            kinematics.desired_pos[1] = distance*sin(i);
-            Serial.print("Position reachable: "); Serial.print(kinematics.desired_pos[0]); Serial.print(","); Serial.println(kinematics.desired_pos[1]);
+            float phi = 90+theta;
+            float deg_to_rad = 3.1415/180;
+            int valor = distance;
+            float x = cos(phi*deg_to_rad) * valor;
+            float y = sin(phi*deg_to_rad) * valor;
+            kinematics.desired_pos[0] = x;
+            kinematics.desired_pos[1] = y;
             pieceFound = true;
             break;
         }
-        delay(100);
+        delay(50);
     }
-    
 }
 
 char input = ' ';
@@ -123,6 +131,8 @@ void loop()
         {
             input = Serial.read(); 
         }
+        if(input=='A') automaticMode=true;
+        if(input=='Q') automaticMode=false;
         //VERIFICAR TRANSIÇÕES
         if(state_machine.state==CONTROL)
         {
@@ -196,6 +206,27 @@ void loop()
         //ESCREVER OUTPUTS
         switch (state_machine.state)
         {
+            case SCAN_GRID:
+                scan();
+                break;
+            case MOVE:
+                kinematics.moveToPos(kinematics.desired_pos[0],kinematics.desired_pos[1]);
+                if(kinematics.desired_pos[0]==kinematics.curr_pos[0] &&
+                kinematics.desired_pos[1]==kinematics.curr_pos[1]) reachedPosition=true;
+                break;
+            case PICKUP:
+                kinematics.pickUp();
+                pickupComplete = true;
+                break;
+            case CHECK_COLOR:
+                kinematics.moveToPos(colorCheckX,colorCheckY);
+                color = Sensors::getColor();
+                colorChecked = true;
+                break;
+            case DROP:
+                kinematics.moveToPos(0,SEGMENT_1_LENGTH+SEGMENT_2_LENGTH);
+                dropped=true;
+                break;
             case CONTROL:
                 if (input == 'R') {  
                     kinematics.moveToPos(0, SEGMENT_1_LENGTH + SEGMENT_2_LENGTH);
@@ -265,8 +296,8 @@ void loop()
                     }
 
                     if (validInput) {
-                        kinematics.moveToPos(x, y);
                         Serial.print("Moving to position X: "); Serial.print(x); Serial.print(" Y: "); Serial.println(y);
+                        kinematics.moveToPos(x, y);
                     }
                 }
             break;
