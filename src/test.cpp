@@ -2,6 +2,7 @@
 #include <VL53L0X.h>
 #include <Adafruit_TCS34725.h>
 #include "kinematics.h"
+#include "Sensors.h"
 
 //#define DEBUG
 
@@ -61,34 +62,9 @@ void set_state(fsm_t& fsm, state_t new_state) {
     }
 }
 
-// Objects declaration
-VL53L0X tofsensor;
-Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
 Kinematics kinematics;
 
 char input = ' ';
-
-String getColor() {
-    uint16_t r, g, b, c;
-    tcs.getRawData(&r, &g, &b, &c);
-
-    Serial.print("Raw R: "); Serial.print(r);
-    Serial.print(" G: "); Serial.print(g);
-    Serial.print(" B: "); Serial.print(b);
-    Serial.print(" C: "); Serial.println(c);
-
-    float sum = r + g + b;         
-    if (sum == 0) return "Unknown";
-
-    float normR = r / sum;
-    float normG = g / sum;
-    float normB = b / sum;
-
-    if (normR > normG && normR > normB) return "Red";
-    else if (normG > normR && normG > normB) return "Green";
-    else if (normB > normR && normB > normG) return "Blue";
-    else return "Unknown";
-}
 
 void setup() {
     Serial.begin(9600);
@@ -213,7 +189,7 @@ void loop()
                     kinematics.dropDown();
                 }
                 else if (input == 'S') {
-                    Serial.println(getColor());
+                    Serial.println(Sensors::getColor());
                 }
                 else if (input=='M') 
                 {
