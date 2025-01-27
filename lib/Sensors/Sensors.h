@@ -3,6 +3,8 @@
 #include <Adafruit_TCS34725.h>
 #include <Wire.h>
 
+#define TOF_SENSOR_ADDR 0x31
+
 class Sensors
 {
     private:
@@ -11,4 +13,6 @@ class Sensors
 
     public:
         static String getColor();
+        static void InitializeSensors();
+        static uint16_t readTofDistance();
 };

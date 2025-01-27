@@ -184,9 +184,7 @@ int Kinematics::find_ServoDriver(int addr)
 }
 
 void Kinematics::kinematics_setup()
-{
-    Wire.begin();
-    
+{   
     while (!find_ServoDriver(PCA9685_I2C_ADDRESS)) {
         Serial.println("No PCA9685 found ... check your connections");
         delay(200);

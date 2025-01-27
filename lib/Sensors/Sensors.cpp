@@ -1,6 +1,14 @@
 #include "Sensors.h"
 
+VL53L0X Sensors::tofsensor;
 Adafruit_TCS34725 Sensors::tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
+
+void Sensors::InitializeSensors()
+{
+    tofsensor.setAddress(TOF_SENSOR_ADDR);
+    tofsensor.init();
+    tofsensor.startContinuous();
+}
 
 String Sensors::getColor() 
 {
@@ -30,4 +38,14 @@ String Sensors::getColor()
     else if (normG > normR && normG > normB) return "Green";
     else if (normB > normR && normB > normG) return "Blue";
     else return "Unknown";
+}
+
+uint16_t Sensors::readTofDistance()
+{
+    uint16_t distance = tofsensor.readRangeContinuousMillimeters();
+    if (tofsensor.timeoutOccurred()) {
+        Serial.println("Erro: Timeout no VL53L0X");
+        return 0;
+    }
+    return distance;
 }

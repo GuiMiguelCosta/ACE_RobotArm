@@ -67,10 +67,16 @@ Kinematics kinematics;
 char input = ' ';
 
 void setup() {
+
     Serial.begin(9600);
+
+    Wire.begin();
     kinematics.kinematics_setup();
+    Sensors::InitializeSensors();
+
     state_machine.new_state = CONTROL;
     set_state(state_machine,state_machine.new_state);
+    Sensors::InitializeSensors();
 }
 
 void loop() 
@@ -190,6 +196,9 @@ void loop()
                 }
                 else if (input == 'S') {
                     Serial.println(Sensors::getColor());
+                }
+                else if (input == 'T') {
+                    Serial.println(Sensors::readTofDistance());
                 }
                 else if (input=='M') 
                 {
