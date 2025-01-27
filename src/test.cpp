@@ -17,6 +17,8 @@ bool pickupComplete = false;
 bool colorChecked = false;
 bool dropped = false;
 
+#define MAX_PIECE_DISTANCE 21
+
 typedef enum {
     REST,
     MOVE,
@@ -63,6 +65,31 @@ void set_state(fsm_t& fsm, state_t new_state) {
 }
 
 Kinematics kinematics;
+
+void scan()
+{
+    kinematics.moveToPos(SEGMENT_1_LENGTH+SEGMENT_2_LENGTH,0);
+    for (int i = -90; i < 90; i++)
+    {
+        kinematics.moveServoToAngle(BASE_SERVO,i);
+        //reads distance in mm
+        uint16_t distance = Sensors::readTofDistance();
+        //passes to cm
+        distance = distance / 10;
+        Serial.println(distance);
+        //compares
+        if(distance<=MAX_PIECE_DISTANCE)
+        {
+            kinematics.desired_pos[0] = distance*cos(i);
+            kinematics.desired_pos[1] = distance*sin(i);
+            Serial.print("Position reachable: "); Serial.print(kinematics.desired_pos[0]); Serial.print(","); Serial.println(kinematics.desired_pos[1]);
+            pieceFound = true;
+            break;
+        }
+        delay(100);
+    }
+    
+}
 
 char input = ' ';
 
@@ -170,10 +197,7 @@ void loop()
         switch (state_machine.state)
         {
             case CONTROL:
-                if (input == 'A') {  
-                    kinematics.moveToPos(kinematics.desired_pos[0], kinematics.desired_pos[1]);
-                } 
-                else if (input == 'R') {  
+                if (input == 'R') {  
                     kinematics.moveToPos(0, SEGMENT_1_LENGTH + SEGMENT_2_LENGTH);
                 } 
                 else if (input == 'O') {  
@@ -199,6 +223,14 @@ void loop()
                 }
                 else if (input == 'T') {
                     Serial.println(Sensors::readTofDistance());
+                }
+                else if (input == 'Z') {
+                    scan();
+                    if(pieceFound)
+                    {
+                        kinematics.moveToPos(kinematics.desired_pos[0],kinematics.desired_pos[1]);
+                        kinematics.pickUp();
+                    }
                 }
                 else if (input=='M') 
                 {

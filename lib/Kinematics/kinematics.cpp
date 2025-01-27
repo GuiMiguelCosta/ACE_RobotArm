@@ -48,7 +48,6 @@ void Kinematics::moveServoToAngle(int servo_num, float target_angle)
     Serial.println("Reached target angle");
 }
 
-
 void Kinematics::moveTwo(float theta1, float theta2) 
 {
     int base_start = curr_theta[BASE_SERVO];
@@ -89,7 +88,6 @@ void Kinematics::moveTwo(float theta1, float theta2)
     Serial.print("ELBOW_SERVO: ");
     Serial.println(elbow_target);
 }
-
 
 void Kinematics::OpenClaw()
 {
