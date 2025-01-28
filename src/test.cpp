@@ -167,6 +167,15 @@ void loop()
                 pieceFound = false;
                 state_machine.new_state = MOVE;
             }
+            /*************************************************************************
+            else if (!automaticMode)
+            {
+                state_machine.new_state = REST;
+            } 
+            } else {
+            // Reentrar no mesmo estado para repetir o scan
+                state_machine.new_state = SCAN_GRID;
+            }************************************************************************/ 
         }
         else if(state_machine.state==MOVE)
         {
