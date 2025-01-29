@@ -3,15 +3,35 @@
 VL53L0X Sensors::tofsensor;
 Adafruit_TCS34725 Sensors::tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Initializes Sensor Depedencies by the following workflow:
+ * 
+ * Sets the TOF sensor's address to avoid conflict with the color sensor
+ * Initializes the TOF sensor in continuous mode
+ ---------------------------------------------------------------------------------------------------------------*/
 void Sensors::InitializeSensors()
 {
+    #ifdef DEBUG
+    Serial.println("Setting up sensor dependencies...");
+    #endif
     tofsensor.setAddress(TOF_SENSOR_ADDR);
     tofsensor.init();
     tofsensor.startContinuous();
+    #ifdef DEBUG
+    Serial.println("Sensor dependencies Setup");
+    #endif
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Reads the inputs of the color sensor and returns the color in a string
+ * 
+ * @return String, the color read by the sensor
+ ---------------------------------------------------------------------------------------------------------------*/
 String Sensors::getColor() 
 {
+    #ifdef DEBUG
+    Serial.println("Checking Color...");
+    #endif
     uint16_t r, g, b, c;
 
     if (!tcs.begin()) {
@@ -40,6 +60,11 @@ String Sensors::getColor()
     else return "Unknown";
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Reads the distance sensor and returns the distance to the origin (0,0)
+ * 
+ * @return distance, the distance from 0,0 coordinates to the detected item in mm
+ ---------------------------------------------------------------------------------------------------------------*/
 uint16_t Sensors::readTofDistance()
 {
     uint16_t distance = tofsensor.readRangeContinuousMillimeters();
@@ -47,5 +72,11 @@ uint16_t Sensors::readTofDistance()
         Serial.println("Erro: Timeout no VL53L0X");
         return 0;
     }
-    return distance;
+    //These +10 are the 10mm that the base has to the sensor
+    #ifdef DEBUG
+    Serial.println("--------------------------------------------------");
+    Serial.print("Distance to base: ");Serial.println((distance+10));
+    Serial.println("--------------------------------------------------");
+    #endif
+    return (distance+10);
 }

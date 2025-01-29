@@ -2,7 +2,12 @@
 
 Adafruit_PWMServoDriver Kinematics::pca9685 = Adafruit_PWMServoDriver(PCA9685_I2C_ADDRESS);
 
-
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that computes a custom PWM signal for each servo based on it's calibration and the desired angle
+ * @param servo, the servo
+ * @param theta, the desired angle
+ * @return the pwm value for that angle for that servo
+ ---------------------------------------------------------------------------------------------------------------*/
 int Kinematics::getPwmForAngle(int servo, int theta) 
 {
     if (theta <= 90 && theta >= -90)
@@ -11,6 +16,11 @@ int Kinematics::getPwmForAngle(int servo, int theta)
     else return getPwmForAngle(0, 0);
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that moves a servo to a desired angle
+ * @param servo_num, the servo
+ * @param target_angle, the desired angle
+ ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::moveServoToAngle(int servo_num, float target_angle) 
 {
     int theta = (int)target_angle;
@@ -40,6 +50,11 @@ void Kinematics::moveServoToAngle(int servo_num, float target_angle)
     curr_theta[servo_num] = theta;
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that attempts the movement of both the base and elbow servos at the same time
+ * @param theta1, the angle for the base servo
+ * @param theta2, the angle for the elbow servo
+ ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::moveTwo(float theta1, float theta2) 
 {
     int base_start = curr_theta[BASE_SERVO];
@@ -75,26 +90,62 @@ void Kinematics::moveTwo(float theta1, float theta2)
     curr_theta[ELBOW_SERVO] = elbow_target;
 }
 
+/*
+ * Method that opens the claw servo to a defined angle
+ */
 void Kinematics::OpenClaw()
 {
+    #ifdef DEBUG
+    Serial.println("--------------------------------------------------");
+    Serial.println("Opening claw");
+    Serial.println("--------------------------------------------------");
+    #endif
     moveServoToAngle(CLAW_SERVO,OPEN_CLAW);
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that closes the claw servo to a defined angle
+ ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::CloseClaw()
 {
+    #ifdef DEBUG
+    Serial.println("--------------------------------------------------");
+    Serial.println("Closing claw");
+    Serial.println("--------------------------------------------------");
+    #endif
     moveServoToAngle(CLAW_SERVO,CLOSED_CLAW);
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that commands the height servo to go down
+ ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::goDown()
 {
+    #ifdef DEBUG
+    Serial.println("--------------------------------------------------");
+    Serial.println("Going down");
+    Serial.println("--------------------------------------------------");
+    #endif
     moveServoToAngle(HEIGHT_SERVO,MIN_HEIGHT);
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that commands the height servo to go up
+ ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::goUp()
 {
+    #ifdef DEBUG
+    Serial.println("--------------------------------------------------");
+    Serial.println("Going up");
+    Serial.println("--------------------------------------------------");
+    #endif
     moveServoToAngle(HEIGHT_SERVO,MAX_HEIGHT);
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Method to pick up a piece at the current position with the following workflow:
+ * Opens the claw -> Goes Down -> Closes the claw -> Goes up
+ ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::pickUp()
 {
     OpenClaw();
@@ -103,6 +154,10 @@ void Kinematics::pickUp()
     goUp();
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Method to drop a piece at the current position with the following workflow:
+ * Goes Down -> Opens the Claw -> Goes Up -> Closes the claw
+ ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::dropDown()
 {
     goDown();
@@ -111,9 +166,16 @@ void Kinematics::dropDown()
     CloseClaw();
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that moves the servos to a desired position
+ * NOTE: THE REFERENCE FOR THESE POSITIONS IS THE BASE_SERVO ROTATION POINT (POINT 0,0 IS THE BASE_SERVO ROTATION POINT)
+ * @param x, the desired x position in cm
+ * @param y, the desired y position in cm
+ ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::moveToPos(float x, float y)
 {
-    const float rad_to_deg = 180.0 / 3.1415;
+    desired_pos[0] = x;
+    desired_pos[1] = y;
 
     float H = sqrt(x * x + y * y);
 
@@ -124,11 +186,11 @@ void Kinematics::moveToPos(float x, float y)
     }
 
     float cosTheta2 = (-H * H + SEGMENT_1_LENGTH * SEGMENT_1_LENGTH + SEGMENT_2_LENGTH * SEGMENT_2_LENGTH) / (2 * SEGMENT_1_LENGTH * SEGMENT_2_LENGTH);
-    float theta2 = acos(cosTheta2) * rad_to_deg; 
+    float theta2 = acos(cosTheta2) * RAD_TO_DEG; 
 
-    float angleToTarget = atan2(y, x) * rad_to_deg; 
+    float angleToTarget = atan2(y, x) * RAD_TO_DEG; 
     float cosAlpha = (H * H + SEGMENT_1_LENGTH * SEGMENT_1_LENGTH - SEGMENT_2_LENGTH * SEGMENT_2_LENGTH) / (2 * H * SEGMENT_1_LENGTH);
-    float alpha = acos(cosAlpha) * rad_to_deg; 
+    float alpha = acos(cosAlpha) * RAD_TO_DEG; 
 
     float theta1 = angleToTarget + alpha;
 
@@ -142,10 +204,24 @@ void Kinematics::moveToPos(float x, float y)
         moveTwo(thetaS1,thetaS2);
         curr_pos[0] = desired_pos[0];
         curr_pos[1] = desired_pos[1];
+        curr_theta[0] = thetaS1;
+        curr_theta[1] = thetaS2;
+        #ifdef DEBUG
+        Serial.println("--------------------------------------------------");
+        Serial.print("Reached position with x: "); Serial.println(curr_pos[0]);
+        Serial.print("Reached position with y: "); Serial.println(curr_pos[1]);
+        Serial.print("Reached position with base_theta: "); Serial.println(curr_theta[0]);
+        Serial.print("Reached position with elbow_theta: "); Serial.println(curr_theta[1]);
+        Serial.println("--------------------------------------------------");
+        #endif
     }
     else Serial.println("Position not reachable due to physical constraints");
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that attemps to find the PCA by it's address to confirm correct connections
+ * @param addr, the address of the PCA
+ ---------------------------------------------------------------------------------------------------------------*/
 int Kinematics::find_ServoDriver(int addr) 
 {
     Wire.beginTransmission(addr);
@@ -156,8 +232,21 @@ int Kinematics::find_ServoDriver(int addr)
     return !err;
 }
 
+
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that sets up the dependencies for the kinematics library and sends servos to default positions with the
+ * following workflow:
+ * 
+ * Tries to find the servo driver
+ * Starts the PCA
+ * Sets the PWM frequency
+ * Sends servos to default positions
+ ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::kinematics_setup()
 {   
+    #ifdef DEBUG
+    Serial.println("Setting up kinematics dependencies...");
+    #endif
     while (!find_ServoDriver(PCA9685_I2C_ADDRESS)) {
         Serial.println("No PCA9685 found ... check your connections");
         delay(200);
@@ -171,8 +260,19 @@ void Kinematics::kinematics_setup()
     moveTwo(0,90);
     goUp();
     CloseClaw();
+    #ifdef DEBUG
+    Serial.println("Kinematics dependencies Setup");
+    #endif
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that checks if a position is reachable based on the distance and theta values
+ * 
+ * @param h, distance to desired position in cm
+ * @param theta1, angle of base servo in degrees
+ * @param theta2, angle of elbow servo in degrees
+ * @return true if parameters are according to physical constraints, false if not
+ ---------------------------------------------------------------------------------------------------------------*/
 bool Kinematics::isPositionReachable(float h, float theta1, float theta2)
 {
     if(h<=0 || h>(SEGMENT_1_LENGTH+SEGMENT_2_LENGTH+TOLERANCE))

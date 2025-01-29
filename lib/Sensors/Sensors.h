@@ -2,7 +2,9 @@
 #include <VL53L0X.h>
 #include <Adafruit_TCS34725.h>
 #include <Wire.h>
+#include "config.h"
 
+//DEFINE TOF CUSTOM ADDRESS
 #define TOF_SENSOR_ADDR 0x31
 
 class Sensors

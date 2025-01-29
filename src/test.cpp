@@ -3,13 +3,15 @@
 #include <Adafruit_TCS34725.h>
 #include "kinematics.h"
 #include "Sensors.h"
+#include "config.h"
 
-//#define DEBUG
-
+//DEFINE AND INITIALIZE CYCLE-RELATED VALUES AND VARIABLES
 #define TIME_BETWEEN_CYCLES 50
 uint32_t now = 0;
 uint32_t last_cycle = 0;
 
+//DEFINE TRANSITION VALUES AND VARIABLES
+#define TIMEOUT 10000
 bool automaticMode = false;
 bool pieceFound = false;
 bool reachedPosition = false;
@@ -17,13 +19,15 @@ bool pickupComplete = false;
 bool colorChecked = false;
 bool dropped = false;
 
+//DEFINE COLOR CHECK POSITIONS
 #define DEFAULT_COLOR_CHECK_X 10
 #define DEFAULT_COLOR_CHECK_Y 10
 float colorCheckX = DEFAULT_COLOR_CHECK_X;
 float colorCheckY = DEFAULT_COLOR_CHECK_Y;
 String color = "Unknown";
 
-#define MAX_PIECE_DISTANCE 21
+//DEFINE PHYSICAL LIMITS FOR A PIECE
+#define MAX_PIECE_DISTANCE (SEGMENT_1_LENGTH+SEGMENT_2_LENGTH)
 
 typedef enum {
     REST,
@@ -35,6 +39,22 @@ typedef enum {
     CONTROL
 } state_t;
 
+// Finite state machine
+typedef struct {
+    state_t state, new_state;
+    unsigned long tis, tes;
+} fsm_t;
+
+Kinematics kinematics;
+fsm_t state_machine;
+char input = ' ';
+
+/*---------------------------------------------------------------------------------------------------------------
+ * Converts a state's number into a string for information display
+ * 
+ * @param state (the state number)
+ * @return A string that corresponds to the state's name
+ ---------------------------------------------------------------------------------------------------------------*/
 const char* stateToString(state_t state) {
     switch (state) {
         case REST: return "REST";
@@ -48,59 +68,84 @@ const char* stateToString(state_t state) {
     }
 }
 
-// Finite state machine
-typedef struct {
-    state_t state, new_state;
-    unsigned long tis, tes;
-} fsm_t;
-
-fsm_t state_machine;
-
-// Set state function
+/*---------------------------------------------------------------------------------------------------------------
+ * Sets a state machine's state to a new state as well as initializing it's time in state and time entering state
+ * 
+ * @param fsm: the state machine that will have it's state changed
+ * @param new_state: the new state for the state machine
+ ---------------------------------------------------------------------------------------------------------------*/
 void set_state(fsm_t& fsm, state_t new_state) {
-    if (fsm.state != new_state) {
-        Serial.print("Switching from ");
-        Serial.print(stateToString(fsm.state));  
-        Serial.print(" to ");
-        Serial.println(stateToString(new_state)); 
-
+    if (fsm.state != new_state) 
+    {   
+        #ifdef DEBUG
+        Serial.println("--------------------------------------------------");
+        Serial.print("Switching from state: ");Serial.print(stateToString(fsm.state));Serial.print("to state: ");Serial.println(stateToString(new_state));
+        Serial.println("--------------------------------------------------");
+        #endif
         fsm.state = new_state;
         fsm.tes = millis();
         fsm.tis = 0;
     }
 }
 
-Kinematics kinematics;
-
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that scans the range of the arm gradually increasing theta
+ * In case it finds a piece within range, defines the desired position to those coordinates
+ ---------------------------------------------------------------------------------------------------------------*/
 void scan()
 {
+    #ifdef DEBUG
+    Serial.println("Starting Scan...");
+    #endif
+
     kinematics.moveToPos(SEGMENT_1_LENGTH+SEGMENT_2_LENGTH,0);
     for (int theta = -90; theta < 90; theta++)
     {
         kinematics.moveServoToAngle(BASE_SERVO,theta);
         //reads distance in mm
-        uint16_t distance = Sensors::readTofDistance();
-        //passes to cm
-        distance = distance / 10;
+        float distance = Sensors::readTofDistance();
         //compares
-        if(distance<=MAX_PIECE_DISTANCE)
+        if(distance<=MAX_PIECE_DISTANCE*10)
         {
+            //reads distance in mm
+            float distance = Sensors::readTofDistance();
+
+            //applies the offset for correct x and y calculation
             float phi = 90+theta;
-            float deg_to_rad = 3.1415/180;
-            int valor = distance;
-            float x = cos(phi*deg_to_rad) * valor;
-            float y = sin(phi*deg_to_rad) * valor;
+
+            //calculate x and y
+            float x = cos(phi*DEG_TO_RAD) * distance;
+            float y = sin(phi*DEG_TO_RAD) * distance;
+            //pass x and y to cm
+            x = x/10;
+            y = y/10;
+            //store them in desired pos
             kinematics.desired_pos[0] = x;
             kinematics.desired_pos[1] = y;
+            //signal that a piece was found
             pieceFound = true;
+            #ifdef DEBUG
+            Serial.println("--------------------------------------------------");
+            Serial.print("Found a piece at theta: ");Serial.println(theta);
+            Serial.print("Distance From Piece is: ");Serial.print(distance);Serial.println("mm");
+            Serial.print("Calculated x is: ");Serial.println(x);
+            Serial.print("Calculated y is: ");Serial.println(y);
+            Serial.println("--------------------------------------------------");
+            #endif
             break;
         }
         delay(50);
     }
+    #ifdef DEBUG
+    Serial.println("Scan Complete without Pieces Found");
+    #endif
 }
 
-char input = ' ';
-
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that sets up all the initial dependencies and state
+ * Starts the Wire and calls the kinematics' and sensor's setups 
+ * Defines initial state
+ ---------------------------------------------------------------------------------------------------------------*/
 void setup() {
 
     Serial.begin(9600);
@@ -109,28 +154,34 @@ void setup() {
     kinematics.kinematics_setup();
     Sensors::InitializeSensors();
 
-    state_machine.new_state = CONTROL;
+    state_machine.new_state = REST;
     set_state(state_machine,state_machine.new_state);
-    Sensors::InitializeSensors();
 }
 
+/*---------------------------------------------------------------------------------------------------------------
+ * Method that loops with each cycle
+ * Has the workflow: 
+ * Checks if the time past the last cycle has passed and if so:
+ * Read Inputs
+ * Defines Transition(s) to trigger
+ * Sets new state based on transitions
+ * Executes methods based on which state is active writing the outputs
+ * Resets Inputs for next cycle
+--------------------------------------------------------------------------------------------------------------- */
 void loop() 
 {
     uint32_t now = millis();
     if(now - last_cycle > TIME_BETWEEN_CYCLES)
     {
-        #ifdef DEBUG
-        Serial.println("Entering New Cycle");
-        Serial.print("Currently in state: "); Serial.println(stateToString(state_machine.state));
-        #endif
-
         //UPDATE CYCLE VARIABLES
+        state_machine.tis += (now - last_cycle);
         last_cycle = now;
         //LER ENTRADAS
         if(Serial.available()>0)
         {
             input = Serial.read(); 
         }
+        //BINDS FOR AUTOMATIC MODE (INDEPENDENT OF STATE)
         if(input=='A') automaticMode=true;
         if(input=='Q') automaticMode=false;
         //VERIFICAR TRANSIÇÕES
@@ -141,7 +192,6 @@ void loop()
                 #ifdef DEBUG
                 Serial.println("Condition to enter REST state from CONTROL triggered");
                 #endif
-
                 state_machine.new_state = REST;
             }
         }
@@ -149,6 +199,9 @@ void loop()
         {
             if (automaticMode) 
             {
+                #ifdef DEBUG
+                Serial.println("Condition to enter SCAN_GRID state from REST triggered");
+                #endif
                 state_machine.new_state = SCAN_GRID;
             } 
             if(input=='C')
@@ -164,48 +217,88 @@ void loop()
         {
             if(pieceFound)
             {
-                pieceFound = false;
+                #ifdef DEBUG
+                Serial.println("Condition to enter MOVE state from SCAN_GRID triggered");
+                #endif
                 state_machine.new_state = MOVE;
             }
-            /*************************************************************************
-            else if (!automaticMode)
+            else if (!automaticMode || state_machine.tis>TIMEOUT)
             {
+                #ifdef DEBUG
+                Serial.println("Condition to enter REST state from SCAN_GRID triggered");
+                #endif
                 state_machine.new_state = REST;
             } 
-            } else {
-            // Reentrar no mesmo estado para repetir o scan
+            else 
+            {
                 state_machine.new_state = SCAN_GRID;
-            }************************************************************************/ 
+            }
         }
         else if(state_machine.state==MOVE)
         {
             if(reachedPosition)
             {
-                reachedPosition = false;
+                #ifdef DEBUG
+                Serial.println("Condition to enter PICKUP state from MOVE triggered");
+                #endif
                 state_machine.new_state = PICKUP;
+            }
+            else if(state_machine.tis>TIMEOUT)
+            {
+                #ifdef DEBUG
+                Serial.println("Condition to enter REST state from MOVE triggered");
+                #endif
+                state_machine.new_state = REST;
             }
         }
         else if(state_machine.state==PICKUP)
         {
             if(pickupComplete)
             {
-                pickupComplete = false;
+                #ifdef DEBUG
+                Serial.println("Condition to enter CHECK_COLOR state from PICKUP triggered");
+                #endif
                 state_machine.new_state = CHECK_COLOR;
+            }
+            else if(state_machine.tis>TIMEOUT)
+            {
+                #ifdef DEBUG
+                Serial.println("Condition to enter REST state from PICKUP triggered");
+                #endif
+                state_machine.new_state = REST;
             }
         }
         else if(state_machine.state==CHECK_COLOR)
         {
             if(colorChecked)
             {
-                colorChecked = false;
+                #ifdef DEBUG
+                Serial.println("Condition to enter DROP state from CHECK_COLOR triggered");
+                #endif
                 state_machine.new_state = DROP;
+            }
+            else if(state_machine.tis>TIMEOUT)
+            {
+                #ifdef DEBUG
+                Serial.println("Condition to enter REST state from CHECK_COLOR triggered");
+                #endif
+                state_machine.new_state = REST;
             }
         }
         else if(state_machine.state==DROP)
         {
             if(dropped)
             {
-                dropped = false;
+                #ifdef DEBUG
+                Serial.println("Condition to enter REST state from DROP triggered");
+                #endif
+                state_machine.new_state = REST;
+            }
+            else if(state_machine.tis>TIMEOUT)
+            {
+                #ifdef DEBUG
+                Serial.println("Condition to enter REST state from DROP triggered");
+                #endif
                 state_machine.new_state = REST;
             }
         }
@@ -215,6 +308,14 @@ void loop()
         //ESCREVER OUTPUTS
         switch (state_machine.state)
         {
+            case REST:
+                pieceFound = false;
+                reachedPosition = false;
+                pickupComplete = false;
+                colorChecked = false;
+                dropped = false;
+                kinematics.moveToPos(0,SEGMENT_1_LENGTH+SEGMENT_2_LENGTH);
+                break;
             case SCAN_GRID:
                 scan();
                 break;
@@ -230,10 +331,14 @@ void loop()
             case CHECK_COLOR:
                 kinematics.moveToPos(colorCheckX,colorCheckY);
                 color = Sensors::getColor();
+                //
+                //DEFINE POSITION OF BOX WITH EACH COLOR HERE
+                //
                 colorChecked = true;
                 break;
             case DROP:
-                kinematics.moveToPos(0,SEGMENT_1_LENGTH+SEGMENT_2_LENGTH);
+                kinematics.moveToPos(kinematics.desired_pos[0],kinematics.desired_pos[1]);
+                kinematics.dropDown();
                 dropped=true;
                 break;
             case CONTROL:
@@ -262,7 +367,7 @@ void loop()
                     Serial.println(Sensors::getColor());
                 }
                 else if (input == 'T') {
-                    Serial.println(Sensors::readTofDistance());
+                    Sensors::readTofDistance();
                 }
                 else if (input == 'Z') {
                     scan();
@@ -272,7 +377,7 @@ void loop()
                         kinematics.pickUp();
                     }
                 }
-                else if (input=='M') 
+                else if (input=='M')
                 {
                     String inputBuffer = "";
                     int x = 0, y = 0;
