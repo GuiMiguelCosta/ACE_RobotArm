@@ -41,10 +41,12 @@ String Sensors::getColor()
 
     tcs.getRawData(&r, &g, &b, &c);
 
+    #ifdef DEBU_MODE
     Serial.print("Raw R: "); Serial.print(r);
     Serial.print(" G: "); Serial.print(g);
     Serial.print(" B: "); Serial.print(b);
     Serial.print(" C: "); Serial.println(c);
+    #endif
 
     float sum = r + g + b;         
     if (sum == 0) return "Unknown";
@@ -53,10 +55,10 @@ String Sensors::getColor()
     float normG = g / sum;
     float normB = b / sum;
 
-    // Determina a cor dominante
     if (normR > normG && normR > normB) return "Red";
     else if (normG > normR && normG > normB) return "Green";
     else if (normB > normR && normB > normG) return "Blue";
+    else if (normR > normG && normG > normB) return "Yellow";
     else return "Unknown";
 }
 

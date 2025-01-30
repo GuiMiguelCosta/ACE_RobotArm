@@ -179,7 +179,7 @@ void Kinematics::moveToPos(float x, float y)
 
     float H = sqrt(x * x + y * y);
 
-    if (H > SEGMENT_1_LENGTH + SEGMENT_2_LENGTH || H <= 0) 
+    if (H > SEGMENT_1_LENGTH + SEGMENT_2_LENGTH + TOLERANCE || H <= 0) 
     {
         Serial.println("Target position is out of reach!");
         return;

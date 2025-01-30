@@ -4,6 +4,7 @@
 #include "kinematics.h"
 #include "Sensors.h"
 #include "GridTranslation.h"
+#include "ColorPositions.h"
 
 #define DEBU_MODE 1
 
@@ -22,12 +23,7 @@ bool colorChecked = false;
 bool dropped = false;
 bool ManualConfirm = false;
 
-//DEFINE COLOR CHECK POSITIONS
-#define DEFAULT_COLOR_CHECK_X 10
-#define DEFAULT_COLOR_CHECK_Y 10
-float colorCheckX = DEFAULT_COLOR_CHECK_X;
-float colorCheckY = DEFAULT_COLOR_CHECK_Y;
-String color = "Unknown";
+#define WAITING_TIME 1000
 
 //DEFINE PHYSICAL LIMITS FOR A PIECE
 #define MAX_PIECE_DISTANCE (SEGMENT_1_LENGTH+SEGMENT_2_LENGTH)
@@ -50,6 +46,7 @@ typedef struct {
 
 Kinematics kinematics;
 GridTranslation gridTranslator;
+ColorPositions colorPositioner;
 fsm_t state_machine;
 char input = ' ';
 
@@ -105,6 +102,10 @@ void scan()
     kinematics.moveToPos(SEGMENT_1_LENGTH+SEGMENT_2_LENGTH,0);
     for (int theta = -90; theta < 90; theta++)
     {
+        #ifdef DEBU_MODE
+        Serial.print("Scanning theta: ");Serial.println(theta);
+        #endif
+
         kinematics.moveServoToAngle(BASE_SERVO,theta);
         //reads distance in mm
         float distance = Sensors::readTofDistance();
@@ -298,12 +299,25 @@ void loop()
                 pickupComplete = true;
                 break;
             case CHECK_COLOR:
-                kinematics.moveToPos(colorCheckX,colorCheckY);
-                color = Sensors::getColor();
-                //
-                //DEFINE POSITION OF BOX WITH EACH COLOR HERE
-                //
-                colorChecked = true;
+                float pos[2];
+                colorPositioner.getCheckerPos(pos);
+                kinematics.moveToPos(pos[0],pos[1]);
+                if(state_machine.tis > WAITING_TIME)
+                {
+                    String color = Sensors::getColor();
+                    colorPositioner.getDepositPosition(pos,color);
+                    if(pos[0]==0&&pos[1]==0)
+                    {
+                        Serial.println("Error reading the color");
+                    }
+                    else
+                    {
+                        kinematics.desired_pos[0] = pos[0];
+                        kinematics.desired_pos[1] = pos[1];
+                        colorChecked = true;
+                    }
+                }
+                
                 break;
             case DROP:
                 kinematics.moveToPos(kinematics.desired_pos[0],kinematics.desired_pos[1]);
@@ -393,7 +407,8 @@ void loop()
                         Serial.print("Setting Desired Position X: "); Serial.print(x); Serial.print(" Y: "); Serial.println(y);
                         kinematics.desired_pos[0] = x;
                         kinematics.desired_pos[1] = y;
-                        ManualConfirm = true;
+                        kinematics.moveToPos(kinematics.desired_pos[0],kinematics.desired_pos[1]);
+                        //ManualConfirm = true;
                     }
                 }
                 
@@ -453,6 +468,7 @@ void loop()
                         }
                         if(isdigit(ch))
                         {
+                            Serial.print("Character read: ");Serial.println(ch);
                             validInput=true;
                             pos = atoi(&ch);
                             break;
@@ -462,14 +478,21 @@ void loop()
                     if (validInput) 
                     {
                         float position[2];
+
+                        #ifdef DEBU_MODE
                         Serial.print("Sending robot to grid position: "); Serial.println(pos);
+                        #endif
+
                         gridTranslator.getGridPos(pos,position);
                         if(position[0]==0 && position[1]==0) Serial.println("Error getting position");
                         else 
                         {
+                            #ifdef DEBU_MODE
                             Serial.println("Positions obtained:");
                             Serial.print("X:");Serial.println(position[0]);
                             Serial.print("Y:");Serial.println(position[1]);
+                            #endif
+
                             kinematics.desired_pos[0] = position[0];
                             kinematics.desired_pos[1] = position[1];
                             ManualConfirm = true;
@@ -503,6 +526,88 @@ void loop()
                     {
                         Serial.print("Setting new Distance between grid blocks: "); Serial.println(dist);
                         gridTranslator.changeGridDimensions(dist);
+                    }
+                }
+            
+                else if(input=='U')
+                {
+                    int deposit;
+                    float x, y;
+
+                    Serial.println("Select a deposit to change position (1 for green, 2 for yellow, 3 for blue, 4 for red). Press L to cancel");
+
+                    while (Serial.available() == 0); 
+                    String input = Serial.readStringUntil('\n');
+
+                    if (input.equalsIgnoreCase("L")) 
+                    {
+                        Serial.println("Operation Canceled");
+                    } 
+                    else 
+                    {
+                        deposit = input.toInt();
+
+                        if (deposit >= 1 && deposit <= 4) 
+                        {
+                            Serial.println("Write the coordinates in the format x,y (in cm): ");
+                            while (Serial.available() == 0); 
+                            input = Serial.readStringUntil('\n'); 
+                            
+                            int separatorIndex = input.indexOf(',');
+                            if (separatorIndex != -1) 
+                            {
+                                x = input.substring(0, separatorIndex).toFloat();
+                                y = input.substring(separatorIndex + 1).toFloat();
+
+                                #ifdef DEBU_MODE
+                                Serial.println("Changed deposit coordinates to:");
+                                Serial.print("X: ");Serial.println(x);
+                                Serial.print("Y: ");Serial.println(y);
+                                #endif
+                                
+                                colorPositioner.changeDepositPosition(x, y, deposit);
+                            } 
+                            else 
+                            {
+                                Serial.println("Invalid coordinates format");
+                            }
+                        } 
+                        else 
+                        {
+                            Serial.println("Invalid deposit number, please select a deposit from 1 to 4");
+                        }
+                    }
+
+                }
+                
+                else if(input=='J')
+                {
+                    float x,y;
+                    Serial.println("Write the new color checker coordinates in the format x,y (in cm). Press L to cancel");
+                    while (Serial.available() == 0); 
+                    String input = Serial.readStringUntil('\n'); 
+                    if (input.equalsIgnoreCase("L")) 
+                    {
+                        Serial.println("Operation Canceled");
+                    } 
+                    else
+                    {
+                        int separatorIndex = input.indexOf(',');
+                        if (separatorIndex != -1) {
+                            x = input.substring(0, separatorIndex).toFloat();
+                            y = input.substring(separatorIndex + 1).toFloat();
+                            
+                            #ifdef DEBU_MODE
+                            Serial.println("Changed color checker coordinates to:");
+                            Serial.print("X: ");Serial.println(x);
+                            Serial.print("Y: ");Serial.println(y);
+                            #endif
+                            colorPositioner.changeCheckerPosition(x, y);
+                        } 
+                        else 
+                        {
+                            Serial.println("Invalid coordinates format");
+                        }
                     }
                 }
             break;
