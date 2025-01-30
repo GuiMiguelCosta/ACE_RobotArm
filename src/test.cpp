@@ -138,7 +138,7 @@ void scan()
             Serial.print("Calculated y is: ");Serial.println(y);
             Serial.println("--------------------------------------------------");
             #endif
-            break;
+            return;
         }
         delay(50);
     }

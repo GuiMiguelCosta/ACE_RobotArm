@@ -3,7 +3,7 @@
 #include <Adafruit_TCS34725.h>
 #include <Wire.h>
 
-//#define DEBU_MODE 1
+#define DEBU_MODE 1
 
 //DEFINE TOF CUSTOM ADDRESS
 #define TOF_SENSOR_ADDR 0x31

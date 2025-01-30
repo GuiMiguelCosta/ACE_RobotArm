@@ -55,10 +55,10 @@ String Sensors::getColor()
     float normG = g / sum;
     float normB = b / sum;
 
-    if (normR > normG && normR > normB) return "Red";
-    else if (normG > normR && normG > normB) return "Green";
-    else if (normB > normR && normB > normG) return "Blue";
-    else if (normR > normG && normG > normB) return "Yellow";
+    if (normR > 0.5) return "Red";
+    else if (normG > 0.5) return "Green";
+    else if (normB > 0.5) return "Blue";
+    else if (normR > 0.3 && normG > 0.3) return "Yellow";
     else return "Unknown";
 }
 
