@@ -1,5 +1,6 @@
 #include <Adafruit_PWMServoDriver.h>
-#include "config.h"
+
+//#define DEBU_MODE 1
 
 //DEFINE SERVO LIMITS
 #define SERVO_MIN 400
@@ -31,12 +32,15 @@
 #define MIN_T2 -50
 
 //DEFINE RADIANS TO DEGREE TRANSFORMATION AND VICE VERSA
-#define RAD_TO_DEG 57.2974693618
-#define DEG_TO_RAD 0.01745277777
+//#define RAD_TO_DEG 57.2974693618
+//#define DEG_TO_RAD 0.01745277777
 
 extern Adafruit_PWMServoDriver pca9685;
 
 class Kinematics {
+    private:
+        float rad_to_deg = 180/3.1415;
+        float deg_to_rad = 3.1415/180;
     public:
         int getPwmForAngle(int servo, int theta);
         void moveServoToAngle(int servo_num, float target_angle);

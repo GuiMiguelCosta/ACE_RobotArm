@@ -95,7 +95,7 @@ void Kinematics::moveTwo(float theta1, float theta2)
  */
 void Kinematics::OpenClaw()
 {
-    #ifdef DEBUG
+    #ifdef DEBU_MODE
     Serial.println("--------------------------------------------------");
     Serial.println("Opening claw");
     Serial.println("--------------------------------------------------");
@@ -108,7 +108,7 @@ void Kinematics::OpenClaw()
  ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::CloseClaw()
 {
-    #ifdef DEBUG
+    #ifdef DEBU_MODE
     Serial.println("--------------------------------------------------");
     Serial.println("Closing claw");
     Serial.println("--------------------------------------------------");
@@ -121,7 +121,7 @@ void Kinematics::CloseClaw()
  ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::goDown()
 {
-    #ifdef DEBUG
+    #ifdef DEBU_MODE
     Serial.println("--------------------------------------------------");
     Serial.println("Going down");
     Serial.println("--------------------------------------------------");
@@ -134,7 +134,7 @@ void Kinematics::goDown()
  ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::goUp()
 {
-    #ifdef DEBUG
+    #ifdef DEBU_MODE
     Serial.println("--------------------------------------------------");
     Serial.println("Going up");
     Serial.println("--------------------------------------------------");
@@ -186,11 +186,11 @@ void Kinematics::moveToPos(float x, float y)
     }
 
     float cosTheta2 = (-H * H + SEGMENT_1_LENGTH * SEGMENT_1_LENGTH + SEGMENT_2_LENGTH * SEGMENT_2_LENGTH) / (2 * SEGMENT_1_LENGTH * SEGMENT_2_LENGTH);
-    float theta2 = acos(cosTheta2) * RAD_TO_DEG; 
+    float theta2 = acos(cosTheta2) * rad_to_deg; 
 
-    float angleToTarget = atan2(y, x) * RAD_TO_DEG; 
+    float angleToTarget = atan2(y, x) * rad_to_deg; 
     float cosAlpha = (H * H + SEGMENT_1_LENGTH * SEGMENT_1_LENGTH - SEGMENT_2_LENGTH * SEGMENT_2_LENGTH) / (2 * H * SEGMENT_1_LENGTH);
-    float alpha = acos(cosAlpha) * RAD_TO_DEG; 
+    float alpha = acos(cosAlpha) * rad_to_deg; 
 
     float theta1 = angleToTarget + alpha;
 
@@ -206,7 +206,7 @@ void Kinematics::moveToPos(float x, float y)
         curr_pos[1] = desired_pos[1];
         curr_theta[0] = thetaS1;
         curr_theta[1] = thetaS2;
-        #ifdef DEBUG
+        #ifdef DEBU_MODE
         Serial.println("--------------------------------------------------");
         Serial.print("Reached position with x: "); Serial.println(curr_pos[0]);
         Serial.print("Reached position with y: "); Serial.println(curr_pos[1]);
@@ -244,7 +244,7 @@ int Kinematics::find_ServoDriver(int addr)
  ---------------------------------------------------------------------------------------------------------------*/
 void Kinematics::kinematics_setup()
 {   
-    #ifdef DEBUG
+    #ifdef DEBU_MODE
     Serial.println("Setting up kinematics dependencies...");
     #endif
     while (!find_ServoDriver(PCA9685_I2C_ADDRESS)) {
@@ -260,7 +260,7 @@ void Kinematics::kinematics_setup()
     moveTwo(0,90);
     goUp();
     CloseClaw();
-    #ifdef DEBUG
+    #ifdef DEBU_MODE
     Serial.println("Kinematics dependencies Setup");
     #endif
 }

@@ -3,7 +3,9 @@
 #include <Adafruit_TCS34725.h>
 #include "kinematics.h"
 #include "Sensors.h"
-#include "config.h"
+#include "GridTranslation.h"
+
+#define DEBU_MODE 1
 
 //DEFINE AND INITIALIZE CYCLE-RELATED VALUES AND VARIABLES
 #define TIME_BETWEEN_CYCLES 50
@@ -18,6 +20,7 @@ bool reachedPosition = false;
 bool pickupComplete = false;
 bool colorChecked = false;
 bool dropped = false;
+bool ManualConfirm = false;
 
 //DEFINE COLOR CHECK POSITIONS
 #define DEFAULT_COLOR_CHECK_X 10
@@ -46,6 +49,7 @@ typedef struct {
 } fsm_t;
 
 Kinematics kinematics;
+GridTranslation gridTranslator;
 fsm_t state_machine;
 char input = ' ';
 
@@ -77,9 +81,9 @@ const char* stateToString(state_t state) {
 void set_state(fsm_t& fsm, state_t new_state) {
     if (fsm.state != new_state) 
     {   
-        #ifdef DEBUG
+        #ifdef DEBU_MODE
         Serial.println("--------------------------------------------------");
-        Serial.print("Switching from state: ");Serial.print(stateToString(fsm.state));Serial.print("to state: ");Serial.println(stateToString(new_state));
+        Serial.print("Switching from state: ");Serial.print(stateToString(fsm.state));Serial.print(" to state: ");Serial.println(stateToString(new_state));
         Serial.println("--------------------------------------------------");
         #endif
         fsm.state = new_state;
@@ -94,7 +98,7 @@ void set_state(fsm_t& fsm, state_t new_state) {
  ---------------------------------------------------------------------------------------------------------------*/
 void scan()
 {
-    #ifdef DEBUG
+    #ifdef DEBU_MODE
     Serial.println("Starting Scan...");
     #endif
 
@@ -107,6 +111,7 @@ void scan()
         //compares
         if(distance<=MAX_PIECE_DISTANCE*10)
         {
+            float deg_to_rad = 3.1415/180;
             //reads distance in mm
             float distance = Sensors::readTofDistance();
 
@@ -114,8 +119,8 @@ void scan()
             float phi = 90+theta;
 
             //calculate x and y
-            float x = cos(phi*DEG_TO_RAD) * distance;
-            float y = sin(phi*DEG_TO_RAD) * distance;
+            float x = cos(phi*deg_to_rad) * distance;
+            float y = sin(phi*deg_to_rad) * distance;
             //pass x and y to cm
             x = x/10;
             y = y/10;
@@ -124,7 +129,7 @@ void scan()
             kinematics.desired_pos[1] = y;
             //signal that a piece was found
             pieceFound = true;
-            #ifdef DEBUG
+            #ifdef DEBU_MODE
             Serial.println("--------------------------------------------------");
             Serial.print("Found a piece at theta: ");Serial.println(theta);
             Serial.print("Distance From Piece is: ");Serial.print(distance);Serial.println("mm");
@@ -136,7 +141,7 @@ void scan()
         }
         delay(50);
     }
-    #ifdef DEBUG
+    #ifdef DEBU_MODE
     Serial.println("Scan Complete without Pieces Found");
     #endif
 }
@@ -189,27 +194,22 @@ void loop()
         {
             if(input=='E')
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter REST state from CONTROL triggered");
-                #endif
                 state_machine.new_state = REST;
+            }
+            if(ManualConfirm==true)
+            {
+                ManualConfirm=false;
+                state_machine.new_state = MOVE;
             }
         }
         else if (state_machine.state == REST) 
         {
             if (automaticMode) 
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter SCAN_GRID state from REST triggered");
-                #endif
                 state_machine.new_state = SCAN_GRID;
             } 
             if(input=='C')
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter CONTROL state from REST triggered");
-                #endif
-
                 state_machine.new_state = CONTROL;
             }
         }
@@ -217,16 +217,10 @@ void loop()
         {
             if(pieceFound)
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter MOVE state from SCAN_GRID triggered");
-                #endif
                 state_machine.new_state = MOVE;
             }
             else if (!automaticMode || state_machine.tis>TIMEOUT)
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter REST state from SCAN_GRID triggered");
-                #endif
                 state_machine.new_state = REST;
             } 
             else 
@@ -238,16 +232,10 @@ void loop()
         {
             if(reachedPosition)
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter PICKUP state from MOVE triggered");
-                #endif
                 state_machine.new_state = PICKUP;
             }
             else if(state_machine.tis>TIMEOUT)
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter REST state from MOVE triggered");
-                #endif
                 state_machine.new_state = REST;
             }
         }
@@ -255,16 +243,10 @@ void loop()
         {
             if(pickupComplete)
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter CHECK_COLOR state from PICKUP triggered");
-                #endif
                 state_machine.new_state = CHECK_COLOR;
             }
             else if(state_machine.tis>TIMEOUT)
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter REST state from PICKUP triggered");
-                #endif
                 state_machine.new_state = REST;
             }
         }
@@ -272,16 +254,10 @@ void loop()
         {
             if(colorChecked)
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter DROP state from CHECK_COLOR triggered");
-                #endif
                 state_machine.new_state = DROP;
             }
             else if(state_machine.tis>TIMEOUT)
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter REST state from CHECK_COLOR triggered");
-                #endif
                 state_machine.new_state = REST;
             }
         }
@@ -289,16 +265,10 @@ void loop()
         {
             if(dropped)
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter REST state from DROP triggered");
-                #endif
                 state_machine.new_state = REST;
             }
             else if(state_machine.tis>TIMEOUT)
             {
-                #ifdef DEBUG
-                Serial.println("Condition to enter REST state from DROP triggered");
-                #endif
                 state_machine.new_state = REST;
             }
         }
@@ -314,7 +284,6 @@ void loop()
                 pickupComplete = false;
                 colorChecked = false;
                 dropped = false;
-                kinematics.moveToPos(0,SEGMENT_1_LENGTH+SEGMENT_2_LENGTH);
                 break;
             case SCAN_GRID:
                 scan();
@@ -345,44 +314,55 @@ void loop()
                 if (input == 'R') {  
                     kinematics.moveToPos(0, SEGMENT_1_LENGTH + SEGMENT_2_LENGTH);
                 } 
+
                 else if (input == 'O') {  
                     kinematics.OpenClaw();
                 } 
+
                 else if (input == 'C') {  
                     kinematics.CloseClaw();
                 } 
+
                 else if (input == '+') {
                     kinematics.goUp();
                 }
+
                 else if (input == '-') {
                     kinematics.goDown();
                 }
+
                 else if (input == 'P') {
                     kinematics.pickUp();
                 }
+
                 else if (input == 'D') {
                     kinematics.dropDown();
                 }
+
                 else if (input == 'S') {
                     Serial.println(Sensors::getColor());
                 }
+
                 else if (input == 'T') {
-                    Sensors::readTofDistance();
+                    Serial.println(Sensors::readTofDistance());
                 }
-                else if (input == 'Z') {
+
+                else if (input == 'Z') 
+                {
                     scan();
                     if(pieceFound)
                     {
-                        kinematics.moveToPos(kinematics.desired_pos[0],kinematics.desired_pos[1]);
-                        kinematics.pickUp();
+                        ManualConfirm=true;
                     }
                 }
+
                 else if (input=='M')
                 {
                     String inputBuffer = "";
                     int x = 0, y = 0;
                     bool validInput = false;
 
+                    Serial.println("Setting up manual coordinates for pickup");
                     Serial.println("Enter X,Y values or press L to cancel:");
 
                     while (!validInput) {
@@ -410,8 +390,119 @@ void loop()
                     }
 
                     if (validInput) {
-                        Serial.print("Moving to position X: "); Serial.print(x); Serial.print(" Y: "); Serial.println(y);
-                        kinematics.moveToPos(x, y);
+                        Serial.print("Setting Desired Position X: "); Serial.print(x); Serial.print(" Y: "); Serial.println(y);
+                        kinematics.desired_pos[0] = x;
+                        kinematics.desired_pos[1] = y;
+                        ManualConfirm = true;
+                    }
+                }
+                
+                else if(input=='G')
+                {
+                    String inputBuffer = "";
+                    int x = 0, y = 0;
+                    bool validInput = false;
+
+                    Serial.println("Setting up new position for Grid");
+                    Serial.println("Enter X,Y values or press L to cancel:");
+
+                    while (!validInput) {
+                        if (Serial.available() > 0) {
+                            char ch = Serial.read();
+
+                            if (ch == 'L') {
+                                Serial.println("Operation canceled.");
+                                break;
+                            }
+                            else if (ch == '\n' || ch == '\r') {
+                                int commaIndex = inputBuffer.indexOf(',');
+                                if (commaIndex != -1) {
+                                    x = inputBuffer.substring(0, commaIndex).toInt();
+                                    y = inputBuffer.substring(commaIndex + 1).toInt();
+                                    validInput = true;
+                                } else {
+                                    Serial.println("Invalid format. Use X,Y.");
+                                    inputBuffer = "";
+                                }
+                            } else {
+                                inputBuffer += ch;
+                            }
+                        }
+                    }
+
+                    if (validInput) 
+                    {
+                        Serial.print("Setting grid to positions X: "); Serial.print(x); Serial.print("and Y: "); Serial.println(y);
+                        gridTranslator.setNewGrid(x,y);
+                    }
+                }
+
+                else if(input=='B')
+                {
+                    bool validInput = false;
+                    int pos = 0;
+
+                    Serial.println("Insert desired position from 0 to 9, press L to cancel");
+                    while(1)
+                    {
+                        char ch = Serial.read();
+                        if(ch=='L')
+                        {
+                            Serial.println("Operation Canceled");
+                            break;
+                        }
+                        if(isdigit(ch))
+                        {
+                            validInput=true;
+                            pos = atoi(&ch);
+                            break;
+                        } 
+                    }
+
+                    if (validInput) 
+                    {
+                        float position[2];
+                        Serial.print("Sending robot to grid position: "); Serial.println(pos);
+                        gridTranslator.getGridPos(pos,position);
+                        if(position[0]==0 && position[1]==0) Serial.println("Error getting position");
+                        else 
+                        {
+                            Serial.println("Positions obtained:");
+                            Serial.print("X:");Serial.println(position[0]);
+                            Serial.print("Y:");Serial.println(position[1]);
+                            kinematics.desired_pos[0] = position[0];
+                            kinematics.desired_pos[1] = position[1];
+                            ManualConfirm = true;
+                        }
+                    }
+                }
+                
+                else if(input=='X')
+                {
+                    bool validInput = false;
+                    int dist = 0;
+
+                    Serial.println("Insert desired distance from 0 to 9, press L to cancel Operation");
+                    while(1)
+                    {
+                        char ch = Serial.read();
+                        if(ch=='L')
+                        {
+                            Serial.println("Operation Canceled");
+                            break;
+                        }
+                        if(isdigit(ch))
+                        {
+                            validInput=true;
+                            dist = atoi(&ch);
+                            break;
+                        } 
+                    }
+
+                    if (validInput) 
+                    {
+                        Serial.print("Setting new Distance between grid blocks: "); Serial.println(dist);
+                        gridTranslator.changeGridDimensions(dist);
                     }
                 }
             break;

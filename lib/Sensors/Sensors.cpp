@@ -11,13 +11,13 @@ Adafruit_TCS34725 Sensors::tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS
  ---------------------------------------------------------------------------------------------------------------*/
 void Sensors::InitializeSensors()
 {
-    #ifdef DEBUG
+    #ifdef DEBU_MODE
     Serial.println("Setting up sensor dependencies...");
     #endif
     tofsensor.setAddress(TOF_SENSOR_ADDR);
     tofsensor.init();
     tofsensor.startContinuous();
-    #ifdef DEBUG
+    #ifdef DEBU_MODE
     Serial.println("Sensor dependencies Setup");
     #endif
 }
@@ -29,7 +29,7 @@ void Sensors::InitializeSensors()
  ---------------------------------------------------------------------------------------------------------------*/
 String Sensors::getColor() 
 {
-    #ifdef DEBUG
+    #ifdef DEBU_MODE
     Serial.println("Checking Color...");
     #endif
     uint16_t r, g, b, c;
@@ -73,7 +73,7 @@ uint16_t Sensors::readTofDistance()
         return 0;
     }
     //These +10 are the 10mm that the base has to the sensor
-    #ifdef DEBUG
+    #ifdef DEBU_MODE
     Serial.println("--------------------------------------------------");
     Serial.print("Distance to base: ");Serial.println((distance+10));
     Serial.println("--------------------------------------------------");
