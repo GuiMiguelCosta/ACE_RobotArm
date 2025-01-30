@@ -86,6 +86,8 @@ void set_state(fsm_t& fsm, state_t new_state) {
         fsm.state = new_state;
         fsm.tes = millis();
         fsm.tis = 0;
+        
+        if(new_state==REST) kinematics.moveToPos(0,SEGMENT_1_LENGTH+SEGMENT_2_LENGTH);
     }
 }
 
