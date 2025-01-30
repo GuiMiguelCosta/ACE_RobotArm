@@ -304,6 +304,7 @@ void loop()
                 float pos[2];
                 colorPositioner.getCheckerPos(pos);
                 kinematics.moveToPos(pos[0],pos[1]);
+                kinematics.dropDown();
                 if(state_machine.tis > WAITING_TIME)
                 {
                     String color = Sensors::getColor();
@@ -319,6 +320,7 @@ void loop()
                         colorChecked = true;
                     }
                 }
+                kinematics.pickUp();
                 
                 break;
             case DROP:
