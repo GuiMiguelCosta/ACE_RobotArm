@@ -304,7 +304,7 @@ void loop()
                 float pos[2];
                 colorPositioner.getCheckerPos(pos);
                 kinematics.moveToPos(pos[0],pos[1]);
-                kinematics.dropDown();
+                kinematics.moveServoToAngle(HEIGHT_SERVO,70);
                 if(state_machine.tis > WAITING_TIME)
                 {
                     String color = Sensors::getColor();
@@ -320,7 +320,7 @@ void loop()
                         colorChecked = true;
                     }
                 }
-                kinematics.pickUp();
+                kinematics.goUp();
                 
                 break;
             case DROP:
@@ -411,8 +411,7 @@ void loop()
                         Serial.print("Setting Desired Position X: "); Serial.print(x); Serial.print(" Y: "); Serial.println(y);
                         kinematics.desired_pos[0] = x;
                         kinematics.desired_pos[1] = y;
-                        kinematics.moveToPos(kinematics.desired_pos[0],kinematics.desired_pos[1]);
-                        //ManualConfirm = true;
+                        ManualConfirm = true;
                     }
                 }
                 
